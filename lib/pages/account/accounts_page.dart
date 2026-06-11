@@ -19,9 +19,12 @@ import '../../utils/ui_scale_extensions.dart';
 import '../../utils/account_type_utils.dart';
 import '../../utils/currencies.dart';
 import '../../widgets/charts/asset_composition_chart.dart';
+import '../../widgets/charts/line_chart.dart';
+import '../../utils/net_worth_trend_utils.dart';
 import '../currency/exchange_rate_page.dart';
 import 'account_edit_page.dart';
 import 'account_detail_page.dart';
+import 'net_worth_trend_page.dart';
 
 class AccountsPage extends ConsumerStatefulWidget {
   final bool asTab;
@@ -280,27 +283,45 @@ class _AccountsPageState extends ConsumerState<AccountsPage> {
             ),
             error: (_, __) => const SizedBox.shrink(),
           ),
-          // 饼图:单货币 或 折算态显示(折算态用折算后聚合数据)
-          if (showComposition) ...[
-            // 分割线
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12.0.scaled(context, ref)),
-              child: Divider(height: 1, color: BeeTokens.divider(context)),
-            ),
-            // 资产构成饼图部分
-            effectiveCompositionAsync.when(
-              skipLoadingOnReload: true,
-              data: (data) => Padding(
-                padding: EdgeInsets.all(12.0.scaled(context, ref)),
-                child: AssetCompositionChart(data: data, embedded: true),
-              ),
-              loading: () => SizedBox(
-                height: 180.0.scaled(context, ref),
-                child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              ),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
-          ],
+          // 走势 / 构成 切换区:
+          // - showComposition=true（单币种 或 折算态）：可在「净值走势」「资产构成」间切换，记住偏好；
+          // - showComposition=false（多币种非折算，构成无法合并）：只展示走势（净值裸加）。
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12.0.scaled(context, ref)),
+            child: Divider(height: 1, color: BeeTokens.divider(context)),
+          ),
+          Builder(builder: (context) {
+            final view = showComposition
+                ? ref.watch(assetTrendViewProvider)
+                : AssetTrendView.trend;
+            return Column(
+              children: [
+                if (showComposition)
+                  Padding(
+                    padding: EdgeInsets.only(top: 10.0.scaled(context, ref)),
+                    child:
+                        _trendCompositionToggle(context, ref, view, primaryColor),
+                  ),
+                Padding(
+                  padding: EdgeInsets.all(12.0.scaled(context, ref)),
+                  child: view == AssetTrendView.composition
+                      ? effectiveCompositionAsync.when(
+                          skipLoadingOnReload: true,
+                          data: (data) =>
+                              AssetCompositionChart(data: data, embedded: true),
+                          loading: () => SizedBox(
+                            height: 180.0.scaled(context, ref),
+                            child: const Center(
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2)),
+                          ),
+                          error: (_, __) => const SizedBox.shrink(),
+                        )
+                      : _buildNetWorthChartInline(context, ref),
+                ),
+              ],
+            );
+          }),
         ],
       ),
     );
@@ -470,6 +491,114 @@ class _AccountsPageState extends ConsumerState<AccountsPage> {
     );
   }
 
+  /// 资产卡内嵌净值走势图（完整版：带网格 + 月份标签，非缩略 sparkline），点击进全屏
+  /// 趋势页。interactive:false → LineChart 不吞 tap，把点击交给外层 InkWell。
+  Widget _buildNetWorthChartInline(BuildContext context, WidgetRef ref) {
+    final now = trendTodayAnchor();
+    final start = DateTime(now.year, now.month - 11, 1);
+    final seriesAsync = ref.watch(
+        netWorthTrendSeriesProvider((startDate: start, endDate: now)));
+    final hide = ref.watch(hideAmountsProvider);
+    final primary = ref.watch(primaryColorProvider);
+    final l10n = AppLocalizations.of(context);
+    return seriesAsync.maybeWhen(
+      data: (series) {
+        final monthly = downsampleMonthly(series);
+        if (monthly.length < 2) {
+          return _inlineChartBox(
+            context,
+            ref,
+            Text(l10n.commonEmpty,
+                style: TextStyle(
+                    fontSize: 12, color: BeeTokens.textTertiary(context))),
+          );
+        }
+        return InkWell(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const NetWorthTrendPage()),
+          ),
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            height: 180.0.scaled(context, ref),
+            child: LineChart(
+              values: monthly.map((e) => e.net).toList(),
+              xLabels: monthly
+                  .map((e) => '${e.date.year % 100}/${e.date.month}')
+                  .toList(),
+              highlightIndex: monthly.length - 1,
+              onSwipeLeft: () {},
+              onSwipeRight: () {},
+              showHint: false,
+              hideAmounts: hide,
+              themeColor: primary,
+              whiteBg: !BeeTokens.isDark(context),
+              isDark: BeeTokens.isDark(context),
+              showGrid: true,
+              showDots: false,
+              annotate: true,
+              interactive: false, // 点击交给外层 InkWell 进全屏页
+              minimal: true, // 去背景/Y轴/均线，避免嵌在 SectionCard 内暗黑模式「卡中卡」
+            ),
+          ),
+        );
+      },
+      error: (_, __) => _inlineChartBox(
+        context,
+        ref,
+        Text(l10n.commonError,
+            style: TextStyle(
+                fontSize: 12, color: BeeTokens.textTertiary(context))),
+      ),
+      orElse: () => _inlineChartBox(context, ref,
+          const Center(child: CircularProgressIndicator(strokeWidth: 2))),
+    );
+  }
+
+  Widget _inlineChartBox(BuildContext context, WidgetRef ref, Widget child) =>
+      SizedBox(
+        height: 180.0.scaled(context, ref),
+        child: Center(child: child),
+      );
+
+  /// 走势 / 构成 切换控件（主题色分段胶囊）。
+  Widget _trendCompositionToggle(BuildContext context, WidgetRef ref,
+      AssetTrendView view, Color primary) {
+    final l10n = AppLocalizations.of(context);
+    Widget seg(AssetTrendView v, String label) {
+      final on = view == v;
+      return GestureDetector(
+        onTap: () => ref.read(assetTrendViewProvider.notifier).select(v),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: EdgeInsets.symmetric(
+              horizontal: 14.0.scaled(context, ref),
+              vertical: 6.0.scaled(context, ref)),
+          decoration: BoxDecoration(
+            color: on ? primary.withValues(alpha: 0.15) : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: on ? primary : BeeTokens.border(context), width: 1),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                fontSize: 12,
+                color: on ? primary : BeeTokens.textSecondary(context),
+                fontWeight: on ? FontWeight.w600 : FontWeight.normal,
+              )),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        seg(AssetTrendView.trend, l10n.netWorthTrendTitle),
+        SizedBox(width: 8.0.scaled(context, ref)),
+        seg(AssetTrendView.composition, l10n.assetComposition),
+      ],
+    );
+  }
+
   /// 折算视图：净资产折算总额 + 每币种折算行 + 缺失标示 + 脚注入口 + 折算总资产/总负债。
   /// 仅在多币种总闸开启且 [convertedNetWorthProvider] 就绪时渲染（见 _buildNetWorthContent）。
   Widget _buildConvertedNetWorthContent(
@@ -481,7 +610,6 @@ class _AccountsPageState extends ConsumerState<AccountsPage> {
     final l10n = AppLocalizations.of(context);
     final base = ref.watch(baseCurrencyProvider).toUpperCase();
     final nwByCurrency = ref.watch(netWorthBreakdownByCurrencyProvider).valueOrNull ?? const {};
-    final hasMissing = converted.missingCurrencies.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -593,37 +721,7 @@ class _AccountsPageState extends ConsumerState<AccountsPage> {
             ),
           ],
         ),
-        SizedBox(height: 12.0.scaled(context, ref)),
-        // 脚注:无缺失 → 折算日期(tertiary,若 >7 天变橙);有缺失 → 缺失提示(橙)。点击进汇率页。
-        Builder(builder: (context) {
-          bool isStale = false;
-          if (!hasMissing) {
-            final d = DateTime.tryParse(converted.oldestRateDate ?? '');
-            if (d != null) {
-              isStale = DateTime.now().difference(d) > const Duration(days: 7);
-            }
-          }
-          return InkWell(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ExchangeRatePage()),
-            ),
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 4.0.scaled(context, ref)),
-              child: Text(
-                hasMissing
-                    ? l10n.convertedPartialWarning(converted.missingCurrencies.join('/'))
-                    : l10n.convertedFootnote(converted.oldestRateDate ?? '-'),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: (hasMissing || isStale)
-                      ? Colors.orange
-                      : BeeTokens.textTertiary(context),
-                ),
-              ),
-            ),
-          );
-        }),
+        // 汇率折算脚注已折叠进「详情」弹窗(见 _showNetWorthConversionDetail），首屏不再展示。
         SizedBox(height: 8.0.scaled(context, ref)),
       ],
     );
@@ -651,6 +749,36 @@ class _AccountsPageState extends ConsumerState<AccountsPage> {
         isMissing: converted.missingCurrencies.contains(code),
       );
     }).toList();
+    // 汇率折算脚注（原在资产页首屏）折叠到这里:无缺失→折算日期(>7 天变橙),有缺失→
+    // 缺失提示(橙),点击进汇率页管理。
+    final hasMissing = converted.missingCurrencies.isNotEmpty;
+    final rd = converted.oldestRateDate != null
+        ? DateTime.tryParse(converted.oldestRateDate!)
+        : null;
+    final isStale = !hasMissing &&
+        rd != null &&
+        DateTime.now().difference(rd) > const Duration(days: 7);
+    final footer = InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ExchangeRatePage()),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        child: Text(
+          hasMissing
+              ? l10n.convertedPartialWarning(
+                  converted.missingCurrencies.join('/'))
+              : l10n.convertedFootnote(converted.oldestRateDate ?? '-'),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11,
+            color: (hasMissing || isStale)
+                ? Colors.orange
+                : BeeTokens.textTertiary(context),
+          ),
+        ),
+      ),
+    );
     _showConversionDetailSheet(
       context,
       ref,
@@ -658,6 +786,7 @@ class _AccountsPageState extends ConsumerState<AccountsPage> {
       entries: entries,
       baseSymbol: baseSymbol,
       useCompact: useCompact,
+      footer: footer,
     );
   }
 
@@ -1340,6 +1469,7 @@ void _showConversionDetailSheet(
   required List<_ConversionDetailEntry> entries,
   required String baseSymbol,
   required bool useCompact,
+  Widget? footer,
 }) {
   showModalBottomSheet(
     context: context,
@@ -1386,6 +1516,7 @@ void _showConversionDetailSheet(
                         baseSymbol: baseSymbol,
                         useCompact: useCompact,
                       ),
+                    if (footer != null) footer,
                   ],
                 ),
               ),

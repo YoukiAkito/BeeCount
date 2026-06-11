@@ -29,6 +29,13 @@ class LineChart extends StatelessWidget {
   final double xLabelFontSize;
   final double yLabelFontSize;
   final bool isDark; // 是否暗黑模式
+  // minimal 模式:用于 sparkline 等嵌入场景,去掉背景 RRect / Y 轴线 / 平均值虚线,
+  // 避免卡中卡(白底套白底 + 轴线)的视觉污染。默认 false,旧调用方零变化。
+  final bool minimal;
+
+  /// 是否启用内部手势(点击高亮 / 横滑切周期)。资产卡内嵌图等设 false,把 tap
+  /// 让给外层 InkWell(点击进全屏页);否则内部 opaque GestureDetector 会吞掉 tap。
+  final bool interactive;
 
   const LineChart({
     super.key,
@@ -56,19 +63,27 @@ class LineChart extends StatelessWidget {
     this.xLabelFontSize = 10,
     this.yLabelFontSize = 10,
     this.isDark = false,
+    this.minimal = false,
+    this.interactive = true,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (details) {
-        // 如果有点击回调，处理点击事件
-        if (onPrimaryLineTap != null || onSecondaryLineTap != null) {
-          _handleTap(details.localPosition, context);
-        }
-      },
-      onHorizontalDragEnd: (details) {
+      // interactive=false(资产卡内嵌图等)不自带手势:tap/swipe 让位给外层
+      // (如外层 InkWell 点击进全屏页)。否则内部 opaque GestureDetector 会
+      // 赢得手势竞技场、吞掉外层的点击。
+      behavior:
+          interactive ? HitTestBehavior.opaque : HitTestBehavior.translucent,
+      onTapDown: !interactive
+          ? null
+          : (details) {
+              // 如果有点击回调，处理点击事件
+              if (onPrimaryLineTap != null || onSecondaryLineTap != null) {
+                _handleTap(details.localPosition, context);
+              }
+            },
+      onHorizontalDragEnd: !interactive ? null : (details) {
         final v = details.primaryVelocity ?? 0;
         if (v < 0) {
           onSwipeLeft();
@@ -98,6 +113,7 @@ class LineChart extends StatelessWidget {
               xLabelFontSize: xLabelFontSize,
               yLabelFontSize: yLabelFontSize,
               isDark: isDark,
+              minimal: minimal,
             ),
           ),
           if (showHint)
@@ -228,6 +244,7 @@ class _LinePainter extends CustomPainter {
   final double xLabelFontSize;
   final double yLabelFontSize;
   final bool isDark;
+  final bool minimal;
 
   _LinePainter({
     required this.values,
@@ -247,6 +264,7 @@ class _LinePainter extends CustomPainter {
     this.xLabelFontSize = 10,
     this.yLabelFontSize = 10,
     this.isDark = false,
+    this.minimal = false,
   });
 
   // 获取主文字颜色（暗黑模式感知）
@@ -257,11 +275,14 @@ class _LinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final bgPaint = Paint()..color = whiteBg ? Colors.white : BeeTokens.dividerStatic;
-    // 背景
-    canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, Radius.circular(cornerRadius)), bgPaint);
+    // 背景:minimal 模式不画(sparkline 嵌入卡片内,避免卡中卡)
+    if (!minimal) {
+      final rect = Offset.zero & size;
+      final bgPaint =
+          Paint()..color = whiteBg ? Colors.white : BeeTokens.dividerStatic;
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(rect, Radius.circular(cornerRadius)), bgPaint);
+    }
 
     // 网格（可选）
     if (showGrid) {
@@ -388,22 +409,26 @@ class _LinePainter extends CustomPainter {
       }
     }
 
-    // 左侧Y轴线
-    final axisPaint = Paint()
-      ..color = BeeTokens.dividerStatic
-      ..strokeWidth = 1.0;
-    canvas.drawLine(Offset(8, topPadding),
-        Offset(8, size.height - bottomPadding), axisPaint);
+    // 左侧Y轴线（minimal 模式不画）
+    if (!minimal) {
+      final axisPaint = Paint()
+        ..color = BeeTokens.dividerStatic
+        ..strokeWidth = 1.0;
+      canvas.drawLine(Offset(8, topPadding),
+          Offset(8, size.height - bottomPadding), axisPaint);
+    }
 
-    // 主线平均线（虚线）
-    final avgY = yFor(avgV);
-    final avgLinePaint = Paint()
-      ..color = BeeTokens.secondaryTextStatic.withValues(alpha: 0.55)
-      ..strokeWidth = 1.0
-      ..style = PaintingStyle.stroke;
-    _drawDashedLine(
-        canvas, Offset(8, avgY), Offset(size.width - 8, avgY), avgLinePaint,
-        dashWidth: 6, gapWidth: 4);
+    // 主线平均线（虚线，minimal 模式不画）
+    if (!minimal) {
+      final avgY = yFor(avgV);
+      final avgLinePaint = Paint()
+        ..color = BeeTokens.secondaryTextStatic.withValues(alpha: 0.55)
+        ..strokeWidth = 1.0
+        ..style = PaintingStyle.stroke;
+      _drawDashedLine(
+          canvas, Offset(8, avgY), Offset(size.width - 8, avgY), avgLinePaint,
+          dashWidth: 6, gapWidth: 4);
+    }
 
     // 副线平均线（虚线，副线色）
     if (secondaryValues != null &&
@@ -515,7 +540,8 @@ class _LinePainter extends CustomPainter {
         oldDelegate.showGrid != showGrid ||
         oldDelegate.showDots != showDots ||
         oldDelegate.annotate != annotate ||
-        oldDelegate.isDark != isDark;
+        oldDelegate.isDark != isDark ||
+        oldDelegate.minimal != minimal;
   }
 }
 

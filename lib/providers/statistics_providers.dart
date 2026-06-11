@@ -156,6 +156,25 @@ final netWorthTrendProvider = FutureProvider.family
   return repo.getNetWorthDailyBalances(startDate: params.startDate, endDate: params.endDate);
 });
 
+/// 净值趋势序列(资产/负债/净资产每日),范围参数化。
+final netWorthTrendSeriesProvider = FutureProvider.family.autoDispose<
+    List<({DateTime date, double assets, double liabilities, double net})>,
+    ({DateTime startDate, DateTime endDate})>((ref, params) async {
+  final repo = ref.watch(repositoryProvider);
+  ref.watch(statsRefreshProvider);
+  final link = ref.keepAlive();
+  ref.onDispose(() => link.close());
+  return repo.getNetWorthTrendSeries(startDate: params.startDate, endDate: params.endDate);
+});
+
+/// 全局最早一笔交易的发生时间（净值趋势「全部」范围的起点）。无交易返回 null。
+final earliestTransactionDateProvider =
+    FutureProvider.autoDispose<DateTime?>((ref) async {
+  final repo = ref.watch(repositoryProvider);
+  ref.watch(statsRefreshProvider);
+  return repo.getEarliestTransactionDate();
+});
+
 // 统计：资产构成（按账户类型分组）
 final assetCompositionProvider = FutureProvider.autoDispose<List<({String type, double totalBalance})>>(
         (ref) async {
