@@ -13,6 +13,7 @@ import '../../l10n/app_localizations.dart';
 import '../../services/data/note_history_service.dart';
 import '../../services/attachment_service.dart';
 import '../../providers.dart';
+import '../../utils/ui_scale_extensions.dart';
 import '../../pages/tag/widgets/tag_selector.dart';
 import 'note_picker_dialog.dart';
 import 'account_selector.dart';
@@ -184,6 +185,8 @@ typedef AmountEditorResult = ({
   int? accountId,
   List<int> tagIds,
   List<File> pendingAttachments,
+  bool excludeFromStats,
+  bool excludeFromBudget,
 });
 
 class AmountEditorSheet extends ConsumerStatefulWidget {
@@ -197,6 +200,9 @@ class AmountEditorSheet extends ConsumerStatefulWidget {
   final ValueChanged<AmountEditorResult> onSubmit;
   final int ledgerId;
   final int? editingTransactionId; // 编辑模式时的交易ID，用于显示已有附件
+  final String transactionKind; // 'expense' / 'income' / 'transfer'，决定标记开关可见性
+  final bool initialExcludeFromStats; // 不计入收支，编辑模式回显
+  final bool initialExcludeFromBudget; // 不计入预算，编辑模式回显
 
   const AmountEditorSheet({
     super.key,
@@ -210,6 +216,9 @@ class AmountEditorSheet extends ConsumerStatefulWidget {
     required this.onSubmit,
     required this.ledgerId,
     this.editingTransactionId,
+    this.transactionKind = 'expense',
+    this.initialExcludeFromStats = false,
+    this.initialExcludeFromBudget = false,
   });
 
   @override
@@ -245,10 +254,16 @@ class _AmountEditorSheetState extends ConsumerState<AmountEditorSheet> {
   // 待上传的附件列表（新建交易时）
   List<File> _pendingAttachments = [];
 
+  // 交易标记（旗标弹窗）
+  bool _excludeFromStats = false;
+  bool _excludeFromBudget = false;
+
   @override
   void initState() {
     super.initState();
     _date = widget.initialDate;
+    _excludeFromStats = widget.initialExcludeFromStats;
+    _excludeFromBudget = widget.initialExcludeFromBudget;
     _selectedAccountId = widget.initialAccountId;
     _selectedTagIds = List.from(widget.initialTagIds ?? []);
     // 保留原始小数（最多两位），避免编辑已有记录时小数被截断为整数
@@ -818,6 +833,8 @@ class _AmountEditorSheetState extends ConsumerState<AmountEditorSheet> {
                                 accountId: _selectedAccountId,
                                 tagIds: _selectedTagIds,
                                 pendingAttachments: _pendingAttachments,
+                                excludeFromStats: _excludeFromStats,
+                                excludeFromBudget: _excludeFromBudget,
                               ));
 
                               // 注意：不需要在这里重置 _isSubmitting
@@ -940,6 +957,107 @@ class _AmountEditorSheetState extends ConsumerState<AmountEditorSheet> {
     return _buildRowContent(selectedTags, _pendingAttachments.length, []);
   }
 
+  /// 交易标记弹窗：两个标记开关。
+  /// 可见性(01 §三):不计入收支 对 income/expense 显示;不计入预算 仅 expense。
+  /// 转账两个开关都不显示 → 旗标图标本身不渲染,不会触发此弹窗。
+  Future<void> _showFlagsDialog() async {
+    final l10n = AppLocalizations.of(context);
+    final primary = ref.watch(primaryColorProvider);
+    final kind = widget.transactionKind;
+    final showStats = kind != 'transfer';
+    final showBudget = kind == 'expense';
+
+    // 弹窗内用临时变量 + StatefulBuilder 实现实时切换,关闭时写回 sheet 状态。
+    bool stats = _excludeFromStats;
+    bool budget = _excludeFromBudget;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Widget switchTile({
+              required String title,
+              required String hint,
+              required bool value,
+              required ValueChanged<bool> onChanged,
+            }) {
+              return SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: Text(
+                  title,
+                  style: TextStyle(
+                    color: BeeTokens.textPrimary(context),
+                    fontSize: 15.0.scaled(context, ref),
+                  ),
+                ),
+                subtitle: Text(
+                  hint,
+                  style: TextStyle(
+                    color: BeeTokens.textTertiary(context),
+                    fontSize: 12.0.scaled(context, ref),
+                  ),
+                ),
+                value: value,
+                activeColor: primary,
+                onChanged: onChanged,
+              );
+            }
+
+            return AlertDialog(
+              backgroundColor: BeeTokens.surface(context),
+              title: Text(
+                l10n.txFlagDialogTitle,
+                style: TextStyle(
+                  color: BeeTokens.textPrimary(context),
+                  fontSize: 17.0.scaled(context, ref),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (showStats)
+                    switchTile(
+                      title: l10n.txFlagExcludeFromStats,
+                      hint: l10n.txFlagExcludeFromStatsHint,
+                      value: stats,
+                      onChanged: (v) {
+                        setDialogState(() => stats = v);
+                        // 实时写回 sheet 状态,图标 active 态即时更新
+                        setState(() => _excludeFromStats = v);
+                      },
+                    ),
+                  if (showBudget)
+                    switchTile(
+                      title: l10n.txFlagExcludeFromBudget,
+                      hint: l10n.txFlagExcludeFromBudgetHint,
+                      value: budget,
+                      onChanged: (v) {
+                        setDialogState(() => budget = v);
+                        setState(() => _excludeFromBudget = v);
+                      },
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(
+                    AppLocalizations.of(context).commonConfirm,
+                    style: TextStyle(color: primary),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildRowContent(List<Tag> selectedTags, int attachmentCount, List<TransactionAttachment> savedAttachments) {
     final l10n = AppLocalizations.of(context);
     final hasAttachments = attachmentCount > 0;
@@ -1022,9 +1140,38 @@ class _AmountEditorSheetState extends ConsumerState<AmountEditorSheet> {
               ],
             ),
           ),
+          // 旗标图标:紧跟附件图标。转账(两个标记都不适用)→ 不渲染。
+          ..._buildFlagIcon(),
         ],
       ),
     );
+  }
+
+  /// 账单标记旗标图标:点击打开标记弹窗。
+  /// 可见性:转账(income/expense 均不适用)时整体不渲染。
+  /// active 态(任一标记为真)用主题色 + 实心旗;否则与附件图标一致的次级灰 + 空心旗。
+  List<Widget> _buildFlagIcon() {
+    final kind = widget.transactionKind;
+    final showStats = kind != 'transfer';
+    final showBudget = kind == 'expense';
+    // 两个开关都不适用(转账)→ 不显示旗标触发器
+    if (!showStats && !showBudget) return const [];
+
+    final active = _excludeFromStats || _excludeFromBudget;
+    return [
+      const SizedBox(width: 16),
+      GestureDetector(
+        onTap: _showFlagsDialog,
+        behavior: HitTestBehavior.opaque,
+        child: Icon(
+          active ? Icons.flag : Icons.outlined_flag,
+          size: 18,
+          color: active
+              ? ref.watch(primaryColorProvider)
+              : BeeTokens.iconSecondary(context),
+        ),
+      ),
+    ];
   }
 
   Future<void> _handleAttachmentTap(List<TransactionAttachment> savedAttachments) async {

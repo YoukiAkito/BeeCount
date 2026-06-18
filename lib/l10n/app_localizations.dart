@@ -12773,6 +12773,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Historical net worth is the raw sum of each currency, not converted'**
   String get netWorthTrendMultiCurrencyNote;
+
+  /// No description provided for @txFlagExcludeFromStats.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude from income/expense'**
+  String get txFlagExcludeFromStats;
+
+  /// No description provided for @txFlagExcludeFromBudget.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude from budget'**
+  String get txFlagExcludeFromBudget;
+
+  /// No description provided for @txFlagMoreOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'More options'**
+  String get txFlagMoreOptions;
+
+  /// No description provided for @txFlagDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction flags'**
+  String get txFlagDialogTitle;
+
+  /// No description provided for @txFlagExcludeFromStatsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Excluded from stats, still counts toward balance'**
+  String get txFlagExcludeFromStatsHint;
+
+  /// No description provided for @txFlagExcludeFromBudgetHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Doesn\'t count against your budget'**
+  String get txFlagExcludeFromBudgetHint;
+
+  /// No description provided for @txFlagExcludedTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Excluded'**
+  String get txFlagExcludedTag;
+
+  /// No description provided for @txFlagBudgetExcludedTag.
+  ///
+  /// In en, this message translates to:
+  /// **'No budget'**
+  String get txFlagBudgetExcludedTag;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
