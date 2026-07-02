@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'ai_provider_config.dart';
+import 'ai_constants.dart';
 import '../../services/system/logger_service.dart';
 
 /// AI 服务商管理服务
@@ -250,7 +251,7 @@ class AIProviderManager {
     final prefs = await SharedPreferences.getInstance();
     final providers = await getProviders();
     final binding = await getCapabilityBinding();
-    return {
+    final snapshot = <String, dynamic>{
       'providers': providers.map((p) => p.toJson()).toList(),
       'binding': binding.toJson(),
       'custom_prompt': prefs.getString('ai_custom_prompt') ?? '',
@@ -259,6 +260,17 @@ class AIProviderManager {
           prefs.getBool('ai_bill_extraction_enabled') ?? false,
       'use_vision': prefs.getBool('ai_use_vision') ?? false,
     };
+    // 语音设置仅在本机曾显式配置时才携带。server 端 ai_config 是整包替换,
+    // 若未设置端携带空值回推,会清空他机在 server 上配好的语音设置。
+    if (prefs.containsKey(AIConstants.keyVoiceTriggerMode)) {
+      snapshot['voice_trigger_mode'] =
+          prefs.getString(AIConstants.keyVoiceTriggerMode);
+    }
+    if (prefs.containsKey(AIConstants.keyVoiceSilenceTimeoutMs)) {
+      snapshot['voice_silence_timeout_ms'] =
+          prefs.getInt(AIConstants.keyVoiceSilenceTimeoutMs);
+    }
+    return snapshot;
   }
 
   /// 把 server /profile/me 返回的 ai_config dict 落到本地 SharedPreferences。
@@ -303,6 +315,22 @@ class AIProviderManager {
     final useVision = config['use_vision'] as bool?;
     if (useVision != null && prefs.getBool('ai_use_vision') != useVision) {
       await prefs.setBool('ai_use_vision', useVision);
+    }
+
+    // 语音触发方式 / 静音阈值（仅当与本地不同才写，避免触发同步回环）
+    final voiceTriggerMode = config['voice_trigger_mode'] as String?;
+    if (voiceTriggerMode != null &&
+        voiceTriggerMode.isNotEmpty &&
+        prefs.getString(AIConstants.keyVoiceTriggerMode) != voiceTriggerMode) {
+      await prefs.setString(AIConstants.keyVoiceTriggerMode, voiceTriggerMode);
+    }
+    final voiceSilenceTimeout =
+        (config['voice_silence_timeout_ms'] as num?)?.toInt();
+    if (voiceSilenceTimeout != null &&
+        prefs.getInt(AIConstants.keyVoiceSilenceTimeoutMs) !=
+            voiceSilenceTimeout) {
+      await prefs.setInt(
+          AIConstants.keyVoiceSilenceTimeoutMs, voiceSilenceTimeout);
     }
     logger.info(_tag, 'AI 配置已从 server 应用到本地');
   }

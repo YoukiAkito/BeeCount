@@ -372,6 +372,34 @@ abstract class AppLocalizations {
   /// **'No speech detected'**
   String get voiceRecordingNoSpeech;
 
+  String get voiceRecordingTooShort;
+
+  String get voiceRecordingResultLabel;
+
+  String get voiceRecordingAutoHintSpoken;
+
+  String get voiceRecordingAutoHintWaiting;
+
+  String get voiceRecordingHoldToTalk;
+
+  String get voiceRecordingReleaseToFinish;
+
+  String get smartBillingVoiceTrigger;
+
+  String get voiceTriggerModeAuto;
+
+  String get voiceTriggerModeAutoDesc;
+
+  String get voiceTriggerModeHold;
+
+  String get voiceTriggerModeHoldDesc;
+
+  /// No description provided for @smartBillingVoiceSilenceTimeout.
+  String get smartBillingVoiceSilenceTimeout;
+
+  /// No description provided for @smartBillingVoiceSilenceTimeoutValue.
+  String smartBillingVoiceSilenceTimeoutValue(String seconds);
+
   /// No description provided for @commonPrevious.
   ///
   /// In en, this message translates to:
