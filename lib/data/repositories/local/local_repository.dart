@@ -704,6 +704,8 @@ class LocalRepository extends BaseRepository {
     int? toAccountId,
     required DateTime happenedAt,
     String? note,
+    bool? excludeFromStats,
+    bool? excludeFromBudget,
   }) =>
       _transactionRepo.updateTransactionBySyncId(
         syncId: syncId,
@@ -714,6 +716,8 @@ class LocalRepository extends BaseRepository {
         toAccountId: toAccountId,
         happenedAt: happenedAt,
         note: note,
+        excludeFromStats: excludeFromStats,
+        excludeFromBudget: excludeFromBudget,
       );
 
   @override
@@ -1639,8 +1643,22 @@ class LocalRepository extends BaseRepository {
       _accountRepo.getAssetCompositionByTypeAndCurrency();
 
   @override
-  Future<void> updateAccountValuation(int accountId, double newValue) =>
-      _accountRepo.updateAccountValuation(accountId, newValue);
+  Future<void> updateAccountValuation(int accountId, double newValue) async {
+    // 估值更新本质是更新 accounts.initialBalance,需要走 ChangeTracker 才能
+    // 推送到 BeeCount Cloud。参考 updateAccount 的模式:先查 syncId,执行更新,
+    // 再 recordUserGlobalChange。
+    final account =
+        changeTracker != null ? await _accountRepo.getAccount(accountId) : null;
+    await _accountRepo.updateAccountValuation(accountId, newValue);
+    if (account?.syncId != null) {
+      await changeTracker!.recordUserGlobalChange(
+        entityType: 'account',
+        entityId: accountId,
+        entitySyncId: account!.syncId!,
+        action: 'update',
+      );
+    }
+  }
 
   @override
   Future<SharedLedgerAccount?> getSharedAccountBySyncId(String syncId) =>

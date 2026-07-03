@@ -99,6 +99,8 @@ class ImportTransaction {
   final int? categoryId; // 预解析的分类ID（优先于categoryName）
   final List<ImportAttachment>? attachments; // 附件元数据列表
   final String? syncId; // 跨设备同步唯一标识
+  final bool? excludeFromStats; // 不计入收支
+  final bool? excludeFromBudget; // 不计入预算
 
   const ImportTransaction({
     required this.type,
@@ -114,6 +116,8 @@ class ImportTransaction {
     this.categoryId,
     this.attachments,
     this.syncId,
+    this.excludeFromStats,
+    this.excludeFromBudget,
   });
 }
 
@@ -549,6 +553,8 @@ class DataImportService {
         happenedAt: d.Value(tx.happenedAt),
         note: d.Value(tx.note),
         syncId: d.Value(tx.syncId),
+        excludeFromStats: d.Value(tx.excludeFromStats ?? false),
+        excludeFromBudget: d.Value(tx.excludeFromBudget ?? false),
       );
 
       final indexInBatch = batchTx.length;

@@ -266,6 +266,14 @@ class SyncDiffService {
       diffs.add('标签: $from → $to');
     }
 
+    // 比较账单标记
+    if (local.excludeFromStats != (cloud.excludeFromStats ?? false)) {
+      diffs.add('不计入收支: ${local.excludeFromStats} → ${cloud.excludeFromStats ?? false}');
+    }
+    if (local.excludeFromBudget != (cloud.excludeFromBudget ?? false)) {
+      diffs.add('不计入预算: ${local.excludeFromBudget} → ${cloud.excludeFromBudget ?? false}');
+    }
+
     return diffs;
   }
 
@@ -365,6 +373,8 @@ class SyncDiffService {
           toAccountId: toAccountId,
           happenedAt: cloud.happenedAt,
           note: cloud.note,
+          excludeFromStats: cloud.excludeFromStats,
+          excludeFromBudget: cloud.excludeFromBudget,
         ));
         tagIdsBySyncId[syncId] = tagIds;
       }

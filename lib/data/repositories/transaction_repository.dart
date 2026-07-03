@@ -10,6 +10,8 @@ class TransactionUpdateBySyncIdData {
   final int? toAccountId;
   final DateTime happenedAt;
   final String? note;
+  final bool? excludeFromStats;
+  final bool? excludeFromBudget;
 
   const TransactionUpdateBySyncIdData({
     required this.syncId,
@@ -20,6 +22,8 @@ class TransactionUpdateBySyncIdData {
     this.toAccountId,
     required this.happenedAt,
     this.note,
+    this.excludeFromStats,
+    this.excludeFromBudget,
   });
 }
 
@@ -291,6 +295,8 @@ abstract class TransactionRepository {
     int? toAccountId,
     required DateTime happenedAt,
     String? note,
+    bool? excludeFromStats,
+    bool? excludeFromBudget,
   });
 
   /// 根据 syncId 删除交易

@@ -153,6 +153,8 @@ Future<String> exportTransactionsJson(BeeDatabase db, int ledgerId) async {
       'happenedAt': t.happenedAt.toUtc().toIso8601String(),
       'note': _sanitizeString(t.note),
       if (t.syncId != null) 'syncId': t.syncId,
+      'excludeFromStats': t.excludeFromStats,
+      'excludeFromBudget': t.excludeFromBudget,
     };
 
     // 添加账户信息
@@ -393,6 +395,8 @@ ImportData parseJsonToImportData(String jsonStr) {
         tagNames: tagNames,
         attachments: attachments,
         syncId: it['syncId'] as String?,
+        excludeFromStats: it['excludeFromStats'] as bool?,
+        excludeFromBudget: it['excludeFromBudget'] as bool?,
       ));
     }
   }

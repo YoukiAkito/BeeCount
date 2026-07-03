@@ -1318,6 +1318,8 @@ class LocalTransactionRepository implements TransactionRepository {
     int? toAccountId,
     required DateTime happenedAt,
     String? note,
+    bool? excludeFromStats,
+    bool? excludeFromBudget,
   }) async {
     await (db.update(db.transactions)..where((t) => t.syncId.equals(syncId)))
         .write(TransactionsCompanion(
@@ -1328,6 +1330,12 @@ class LocalTransactionRepository implements TransactionRepository {
       toAccountId: d.Value(toAccountId),
       happenedAt: d.Value(happenedAt),
       note: d.Value(note),
+      excludeFromStats: excludeFromStats != null
+          ? d.Value(excludeFromStats)
+          : const d.Value.absent(),
+      excludeFromBudget: excludeFromBudget != null
+          ? d.Value(excludeFromBudget)
+          : const d.Value.absent(),
     ));
   }
 
@@ -1359,6 +1367,12 @@ class LocalTransactionRepository implements TransactionRepository {
               toAccountId: d.Value(u.toAccountId),
               happenedAt: d.Value(u.happenedAt),
               note: d.Value(u.note),
+              excludeFromStats: u.excludeFromStats != null
+                  ? d.Value(u.excludeFromStats)
+                  : const d.Value.absent(),
+              excludeFromBudget: u.excludeFromBudget != null
+                  ? d.Value(u.excludeFromBudget)
+                  : const d.Value.absent(),
             ),
             where: (t) => t.syncId.equals(u.syncId),
           );
