@@ -61,3 +61,5 @@ docs/superpowers/
 tmp
 # Playwright MCP capture artifacts
 .playwright-mcp/
+/.workbuddy
+overview.md
